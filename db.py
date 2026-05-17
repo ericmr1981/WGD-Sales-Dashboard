@@ -6,8 +6,21 @@ import urllib.request
 import urllib.parse
 from typing import Optional, List
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+# Support both local .env and Streamlit Cloud secrets
+try:
+    import streamlit as st
+    _secrets = st.secrets
+    SUPABASE_URL = _secrets.get("SUPABASE_URL", os.environ.get("SUPABASE_URL", ""))
+    SUPABASE_KEY = _secrets.get("SUPABASE_KEY", os.environ.get("SUPABASE_KEY", ""))
+except Exception:
+    SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+    SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise RuntimeError(
+        "SUPABASE_URL and SUPABASE_KEY must be set. "
+        "Set them in .streamlit/secrets.toml (local) or Streamlit Cloud secrets."
+    )
 
 _ctx = ssl.create_default_context()
 _ctx.check_hostname = False

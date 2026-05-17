@@ -36,17 +36,28 @@ def get_active_channels() -> List[str]:
     """返回有数据的支付渠道列表（按金额排序）"""
     import json, ssl, urllib.request, urllib.parse
     import os as _os
-    SUPABASE_URL = _os.environ.get("SUPABASE_URL", "")
-    SUPABASE_KEY = _os.environ.get("SUPABASE_KEY", "")
+
+    # Try Streamlit secrets first (for Cloud), then environment variables (for local)
+    try:
+        import streamlit as st
+        _url = st.secrets.get("SUPABASE_URL", _os.environ.get("SUPABASE_URL", ""))
+        _key = st.secrets.get("SUPABASE_KEY", _os.environ.get("SUPABASE_KEY", ""))
+    except Exception:
+        _url = _os.environ.get("SUPABASE_URL", "")
+        _key = _os.environ.get("SUPABASE_KEY", "")
+
+    if not _url or not _key:
+        return []
+
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
 
     cols = ",".join(CHANNEL_KEYS)
-    url = f"{SUPABASE_URL}/rest/v1/pos_orders?select={cols}&limit=5000"
+    url = f"{_url}/rest/v1/pos_orders?select={cols}&limit=5000"
     req = urllib.request.Request(url)
-    req.add_header("apikey", SUPABASE_KEY)
-    req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+    req.add_header("apikey", _key)
+    req.add_header("Authorization", f"Bearer {_key}")
     req.add_header("Accept", "application/json")
     resp = urllib.request.urlopen(req, context=ctx)
     rows = json.loads(resp.read().decode())
