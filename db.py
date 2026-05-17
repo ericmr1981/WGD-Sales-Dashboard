@@ -16,10 +16,21 @@ def _get_supabase_config():
     # Try Streamlit secrets (Cloud deployment)
     try:
         import streamlit as st
-        return (
-            st.secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL", ""),
-            st.secrets.get("SUPABASE_KEY") or os.environ.get("SUPABASE_KEY", ""),
+        secrets = st.secrets
+        # Support both formats:
+        # [supabase] url=..., key=... (user's format)
+        # SUPABASE_URL=..., SUPABASE_KEY=... (direct format)
+        url = (
+            secrets.get("supabase", {}).get("url")
+            or secrets.get("SUPABASE_URL")
+            or os.environ.get("SUPABASE_URL", "")
         )
+        key = (
+            secrets.get("supabase", {}).get("key")
+            or secrets.get("SUPABASE_KEY")
+            or os.environ.get("SUPABASE_KEY", "")
+        )
+        return url, key
     except Exception:
         pass
     # Fall back to environment variables (local deployment)
