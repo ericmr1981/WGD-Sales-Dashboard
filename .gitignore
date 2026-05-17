@@ -1,0 +1,22 @@
+# Playwright MCP test artifacts
+.playwright-mcp/
+
+# Superpowers
+.superpowers/
+
+# Screenshots
+*.png
+
+# Python
+__pycache__/
+*.pyc
+.env
+venv/
+.venv/
+
+# Streamlit
+.streamlit/
+
+# Supabase local setup
+!supabase_setup/*.sql
+!supabase_setup/import*.py
