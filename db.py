@@ -16,12 +16,6 @@ except Exception:
     SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
     SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError(
-        "SUPABASE_URL and SUPABASE_KEY must be set. "
-        "Set them in .streamlit/secrets.toml (local) or Streamlit Cloud secrets."
-    )
-
 _ctx = ssl.create_default_context()
 _ctx.check_hostname = False
 _ctx.verify_mode = ssl.CERT_NONE
@@ -41,6 +35,11 @@ def _build_qs(params: dict) -> str:
 
 def _supabase_get_all(path: str, params: Optional[dict] = None) -> List[dict]:
     """Fetch all rows by paginating with offset/limit."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise RuntimeError(
+            "SUPABASE_URL and SUPABASE_KEY must be set. "
+            "Set them in .streamlit/secrets.toml (local) or Streamlit Cloud secrets."
+        )
     params = dict(params) if params else {}
     params["limit"] = 1000
     all_rows = []
