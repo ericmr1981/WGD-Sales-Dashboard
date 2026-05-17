@@ -6,19 +6,24 @@ import urllib.request
 import urllib.parse
 from typing import Optional, List
 
-# Support both local .env and Streamlit Cloud secrets
-try:
-    import streamlit as st
-    _secrets = st.secrets
-    SUPABASE_URL = _secrets.get("SUPABASE_URL", os.environ.get("SUPABASE_URL", ""))
-    SUPABASE_KEY = _secrets.get("SUPABASE_KEY", os.environ.get("SUPABASE_KEY", ""))
-except Exception:
-    SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-    SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-
 _ctx = ssl.create_default_context()
 _ctx.check_hostname = False
 _ctx.verify_mode = ssl.CERT_NONE
+
+
+def _get_supabase_config():
+    """Get SUPABASE_URL and SUPABASE_KEY, trying st.secrets first then env vars."""
+    # Try Streamlit secrets (Cloud deployment)
+    try:
+        import streamlit as st
+        return (
+            st.secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL", ""),
+            st.secrets.get("SUPABASE_KEY") or os.environ.get("SUPABASE_KEY", ""),
+        )
+    except Exception:
+        pass
+    # Fall back to environment variables (local deployment)
+    return os.environ.get("SUPABASE_URL", ""), os.environ.get("SUPABASE_KEY", "")
 
 
 def _build_qs(params: dict) -> str:
@@ -35,7 +40,8 @@ def _build_qs(params: dict) -> str:
 
 def _supabase_get_all(path: str, params: Optional[dict] = None) -> List[dict]:
     """Fetch all rows by paginating with offset/limit."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    supabase_url, supabase_key = _get_supabase_config()
+    if not supabase_url or not supabase_key:
         raise RuntimeError(
             "SUPABASE_URL and SUPABASE_KEY must be set. "
             "Set them in .streamlit/secrets.toml (local) or Streamlit Cloud secrets."
@@ -46,10 +52,10 @@ def _supabase_get_all(path: str, params: Optional[dict] = None) -> List[dict]:
     for offset in range(0, 50000, 1000):
         p = dict(params)
         p["offset"] = offset
-        url = f"{SUPABASE_URL}/rest/v1/{path}?{_build_qs(p)}"
+        url = f"{supabase_url}/rest/v1/{path}?{_build_qs(p)}"
         req = urllib.request.Request(url, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("apikey", supabase_key)
+        req.add_header("Authorization", f"Bearer {supabase_key}")
         req.add_header("Accept", "application/json")
         try:
             resp = urllib.request.urlopen(req, context=_ctx)

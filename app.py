@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from typing import List
 from streamlit_echarts import st_echarts
-from db import query_sales_analysis, get_product_names
+from db import query_sales_analysis, get_product_names, _get_supabase_config
 from queries import (
     compute_product_ranking,
     compute_daily_trend,
@@ -35,17 +35,8 @@ CHANNEL_KEYS = list(CHANNEL_META.keys())
 def get_active_channels() -> List[str]:
     """返回有数据的支付渠道列表（按金额排序）"""
     import json, ssl, urllib.request, urllib.parse
-    import os as _os
 
-    # Try Streamlit secrets first (for Cloud), then environment variables (for local)
-    try:
-        import streamlit as st
-        _url = st.secrets.get("SUPABASE_URL", _os.environ.get("SUPABASE_URL", ""))
-        _key = st.secrets.get("SUPABASE_KEY", _os.environ.get("SUPABASE_KEY", ""))
-    except Exception:
-        _url = _os.environ.get("SUPABASE_URL", "")
-        _key = _os.environ.get("SUPABASE_KEY", "")
-
+    _url, _key = _get_supabase_config()
     if not _url or not _key:
         return []
 
