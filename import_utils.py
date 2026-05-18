@@ -109,31 +109,44 @@ def parse_product_sales(file_bytes: bytes) -> List[dict]:
     return rows
 
 
+DEDUP_BATCH = 500
+
+
 def check_existing_orders(order_nos: List[str]) -> set:
     """Query Supabase for which order_nos already exist in pos_orders."""
     if not order_nos:
         return set()
-    quoted = ",".join(urllib.parse.quote(no, safe="") for no in order_nos)
-    result = _supabase_request("GET", f"pos_orders?select=order_no&order_no=in.({quoted})")
-    return {r["order_no"] for r in result if r.get("order_no")}
+    existing = set()
+    for i in range(0, len(order_nos), DEDUP_BATCH):
+        chunk = order_nos[i:i + DEDUP_BATCH]
+        quoted = ",".join(urllib.parse.quote(no, safe="") for no in chunk)
+        result = _supabase_request("GET", f"pos_orders?select=order_no&order_no=in.({quoted})")
+        existing.update(r["order_no"] for r in result if r.get("order_no"))
+    return existing
 
 
 def check_existing_product_sales(keys: List[tuple]) -> set:
     """Query Supabase for which (order_no, product_name) pairs already exist.
 
     Keys is a list of (order_no, product_name) tuples.
-    Since Supabase doesn't support composite IN queries easily,
-    we batch all order_nos and match in-memory.
+    Batches queries to stay within URL length limits.
     """
     if not keys:
         return set()
     order_nos = list({k[0] for k in keys})
-    quoted = ",".join(urllib.parse.quote(no, safe="") for no in order_nos)
-    result = _supabase_request(
-        "GET",
-        f"product_sales?select=order_no,product_name&order_no=in.({quoted})"
-    )
-    existing = {(r["order_no"], r["product_name"]) for r in result if r.get("order_no") and r.get("product_name")}
+    existing = set()
+    for i in range(0, len(order_nos), DEDUP_BATCH):
+        chunk = order_nos[i:i + DEDUP_BATCH]
+        quoted = ",".join(urllib.parse.quote(no, safe="") for no in chunk)
+        result = _supabase_request(
+            "GET",
+            f"product_sales?select=order_no,product_name&order_no=in.({quoted})"
+        )
+        existing.update(
+            (r["order_no"], r["product_name"])
+            for r in result
+            if r.get("order_no") and r.get("product_name")
+        )
     return existing
 
 
