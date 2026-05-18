@@ -14,7 +14,7 @@ from queries import (
     compute_attachment_rate,
     compute_top_combos,
 )
-from import_utils import parse_pos_orders, parse_product_sales, check_existing_orders, check_existing_product_sales, upload_batch
+from import_utils import parse_pos_orders, parse_revenue_csv, parse_product_sales, check_existing_orders, check_existing_revenue, check_existing_product_sales, upload_batch
 
 st.set_page_config(
     page_title="商品销售分析报表",
@@ -49,7 +49,7 @@ def get_active_channels() -> List[str]:
     ctx.verify_mode = ssl.CERT_NONE
 
     cols = ",".join(CHANNEL_KEYS)
-    url = f"{_url}/rest/v1/pos_orders?select={cols}&limit=5000"
+    url = f"{_url}/rest/v1/order_revenue?select={cols}&limit=5000"
     req = urllib.request.Request(url)
     req.add_header("apikey", _key)
     req.add_header("Authorization", f"Bearer {_key}")
@@ -117,14 +117,18 @@ with st.sidebar:
     with st.expander(":material/upload: 数据导入", expanded=False):
         import_type = st.radio(
             "文件类型",
-            ["收银明细表", "商品明细表"],
+            ["收入明细表", "收银明细表", "商品明细表"],
             key="import_type",
             label_visibility="collapsed",
         )
         import_counter = st.session_state.get("import_counter", 0)
+        if import_type == "收银明细表":
+            accepted = ["xlsx"]
+        else:
+            accepted = ["csv"]
         uploaded_file = st.file_uploader(
             "选择文件",
-            type=["xlsx"] if import_type == "收银明细表" else ["csv"],
+            type=accepted,
             key=f"import_file_{import_counter}",
         )
 
@@ -134,7 +138,9 @@ with st.sidebar:
                 with st.spinner("正在解析..."):
                     try:
                         file_bytes = uploaded_file.getvalue()
-                        if import_type == "收银明细表":
+                        if import_type == "收入明细表":
+                            rows = parse_revenue_csv(file_bytes)
+                        elif import_type == "收银明细表":
                             rows = parse_pos_orders(file_bytes)
                         else:
                             rows = parse_product_sales(file_bytes)
@@ -150,7 +156,12 @@ with st.sidebar:
                     if ok:
                         with st.spinner("正在检查重复..."):
                             try:
-                                if import_type == "收银明细表":
+                                if import_type == "收入明细表":
+                                    unique_orders = list({r["order_no"] for r in rows})
+                                    existing = check_existing_revenue(unique_orders)
+                                    new_rows = [r for r in rows if r["order_no"] not in existing]
+                                    dup_count = len(rows) - len(new_rows)
+                                elif import_type == "收银明细表":
                                     existing = check_existing_orders([r["order_no"] for r in rows])
                                     new_rows = [r for r in rows if r["order_no"] not in existing]
                                     dup_count = len(rows) - len(new_rows)
@@ -171,7 +182,12 @@ with st.sidebar:
                         st.session_state.import_new_rows = new_rows
                         st.session_state.import_total = len(rows)
                         st.session_state.import_dup = dup_count
-                        st.session_state.import_table = "pos_orders" if import_type == "收银明细表" else "product_sales"
+                        if import_type == "收入明细表":
+                            st.session_state.import_table = "revenue_detail"
+                        elif import_type == "收银明细表":
+                            st.session_state.import_table = "pos_orders"
+                        else:
+                            st.session_state.import_table = "product_sales"
                         st.session_state.import_type_parsed = import_type
                         st.session_state.import_state = "parsed"
                         st.rerun()
@@ -180,7 +196,12 @@ with st.sidebar:
         if st.session_state.get("import_state") == "parsed":
             new_rows = st.session_state.import_new_rows
             st.caption(f"待导入: {len(new_rows)} 条 | 跳过重复: {st.session_state.import_dup} 条")
-            if st.session_state.import_type_parsed == "收银明细表":
+            if st.session_state.import_type_parsed == "收入明细表":
+                st.dataframe(
+                    [{k: r[k] for k in ["order_no", "sale_date", "total_revenue", "payment_split", "payment_method", "member_id"]} for r in new_rows[:5]],
+                    height=150,
+                )
+            elif st.session_state.import_type_parsed == "收银明细表":
                 st.dataframe(
                     [{k: r[k] for k in ["order_no", "sale_date", "total_revenue", "net_revenue"]} for r in new_rows[:5]],
                     height=150,
@@ -268,6 +289,17 @@ with kpi3:
 with kpi4:
     st.metric("平均客单价", f"¥{avg_order:.1f}")
 
+# Member metrics
+has_member = order_level["member_id"].dropna()
+has_member = has_member[has_member != ""].astype(str)
+has_member = has_member[~has_member.str.startswith("-")]
+has_member = has_member[has_member != "--"]
+member_orders = order_level.loc[has_member.index]
+non_member_orders = order_level.drop(has_member.index)
+member_revenue = member_orders["total_revenue"].sum()
+member_pct = len(member_orders) / total_orders * 100 if total_orders else 0
+member_avg = member_orders["total_revenue"].mean() if len(member_orders) else 0
+
 kpi5, kpi6, kpi7, _ = st.columns(4)
 with kpi5:
     st.metric("连带率", f"{attachment_rate:.2f}")
@@ -275,6 +307,14 @@ with kpi6:
     st.metric("数字支付占比", f"{digital_pct:.1f}%")
 with kpi7:
     st.metric("优惠总额", f"¥{order_level['discount_total'].sum():,.0f}")
+
+kpi8, kpi9, kpi10, _ = st.columns(4)
+with kpi8:
+    st.metric("会员订单", f"{len(member_orders):,}（{member_pct:.0f}%）")
+with kpi9:
+    st.metric("会员贡献", f"¥{member_revenue:,.0f}")
+with kpi10:
+    st.metric("会员客单价", f"¥{member_avg:.1f}")
 
 # ========== 商品排行 + 每日趋势 ==========
 col1, col2 = st.columns(2)

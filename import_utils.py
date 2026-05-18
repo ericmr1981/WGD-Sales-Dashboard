@@ -113,6 +113,48 @@ def parse_pos_orders(file_bytes: bytes) -> List[dict]:
     return rows
 
 
+def parse_revenue_csv(file_bytes: bytes) -> List[dict]:
+    """Parse 收入明细表 CSV into list of row dicts for revenue_detail table."""
+    text = file_bytes.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+    rows = []
+    for row in reader:
+        order_no = clean_value(row.get("订单号", ""))
+        if not order_no:
+            continue
+        rows.append({
+            "order_no": order_no,
+            "brand_name": clean_value(row.get("品牌名称", "")),
+            "city": clean_value(row.get("城市", "")),
+            "store_name": clean_value(row.get("门店名称", "")),
+            "store_id": clean_value(row.get("门店id", "")),
+            "store_code": clean_value(row.get("门店编码", "")),
+            "sale_date": clean_value(row.get("营业日期", "")),
+            "order_time": clean_value(row.get("下单时间", "")),
+            "payment_time": clean_value(row.get("支付时间", "")),
+            "third_party_order_no": clean_value(row.get("三方订单号", "")),
+            "third_party_payment_no": clean_value(row.get("三方支付流水号", "")),
+            "merchant_order_no": clean_value(row.get("商户订单号", "")),
+            "third_party_coupon_id": clean_value(row.get("三方券id", "")),
+            "order_source": clean_value(row.get("订单来源", "")),
+            "order_type": clean_value(row.get("订单类型", "")),
+            "order_status": clean_value(row.get("订单状态", "")),
+            "is_reversed": clean_value(row.get("是否反结", "否")) or "否",
+            "member_id": clean_value(row.get("会员id", "")),
+            "user_phone": clean_value(row.get("用户手机号", "")),
+            "payment_split": clean_value(row.get("结账方式拆分", "")),
+            "payment_method": clean_value(row.get("结账方式名称", "")),
+            "store_open_date": clean_value(row.get("门店开业日期", "")),
+            "gross_income": float(clean_value(row.get("营业收入", "0")) or 0),
+            "net_revenue": float(clean_value(row.get("营业净收", "0")) or 0),
+            "overflow_amount": float(clean_value(row.get("溢收金额", "0")) or 0),
+            "total_revenue": float(clean_value(row.get("营业额", "0")) or 0),
+            "discount_total": float(clean_value(row.get("优惠总额", "0")) or 0),
+            "coupon_service_fee": float(clean_value(row.get("团购券手续费", "0")) or 0),
+        })
+    return rows
+
+
 def parse_product_sales(file_bytes: bytes) -> List[dict]:
     """Parse 商品明细表 CSV into list of row dicts for product_sales table."""
     text = file_bytes.decode("utf-8-sig")
@@ -148,6 +190,19 @@ def check_existing_orders(order_nos: List[str]) -> set:
         chunk = order_nos[i:i + DEDUP_BATCH]
         quoted = ",".join(urllib.parse.quote(no, safe="") for no in chunk)
         result = _supabase_request("GET", f"pos_orders?select=order_no&order_no=in.({quoted})")
+        existing.update(r["order_no"] for r in result if r.get("order_no"))
+    return existing
+
+
+def check_existing_revenue(order_nos: List[str]) -> set:
+    """Query Supabase for which order_nos already exist in revenue_detail."""
+    if not order_nos:
+        return set()
+    existing = set()
+    for i in range(0, len(order_nos), DEDUP_BATCH):
+        chunk = order_nos[i:i + DEDUP_BATCH]
+        quoted = ",".join(urllib.parse.quote(no, safe="") for no in chunk)
+        result = _supabase_request("GET", f"revenue_detail?select=order_no&order_no=in.({quoted})")
         existing.update(r["order_no"] for r in result if r.get("order_no"))
     return existing
 
