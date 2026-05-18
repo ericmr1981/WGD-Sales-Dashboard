@@ -115,3 +115,10 @@ def get_store_names() -> List[str]:
     """Get deduplicated store names from pos_orders."""
     result = _supabase_get_all("pos_orders", {"select": "store_name"})
     return sorted({r["store_name"] for r in result if r.get("store_name")})
+
+
+def get_available_months() -> List[str]:
+    """Get sorted unique YYYY-MM months from pos_orders."""
+    result = _supabase_get_all("pos_orders", {"select": "sale_date"})
+    months = sorted({r["sale_date"][:7] for r in result if r.get("sale_date")})
+    return months

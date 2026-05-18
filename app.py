@@ -2,7 +2,9 @@ import streamlit as st
 import pandas as pd
 from typing import List
 from streamlit_echarts import st_echarts
-from db import query_sales_analysis, get_product_names, get_store_names, _get_supabase_config
+import datetime
+import calendar
+from db import query_sales_analysis, get_product_names, get_store_names, get_available_months, _get_supabase_config
 from queries import (
     compute_product_ranking,
     compute_daily_trend,
@@ -62,15 +64,32 @@ def get_active_channels() -> List[str]:
 product_names = get_product_names()
 active_channels = get_active_channels()
 store_names = get_store_names()
+available_months = get_available_months()
 
 with st.sidebar:
     st.title(":material/filter_alt: 筛选器")
 
+    quick_month = st.selectbox(
+        "月份快捷选择",
+        ["自定义"] + available_months,
+        key="quick_month",
+    )
+    if quick_month != "自定义":
+        year, month = quick_month.split("-")
+        month_start = datetime.date(int(year), int(month), 1)
+        month_end = datetime.date(int(year), int(month), calendar.monthrange(int(year), int(month))[1])
+
     col1, col2 = st.columns(2)
     with col1:
-        date_from = st.date_input("开始日期", value=pd.to_datetime("2026-04-01"))
+        date_from = st.date_input(
+            "开始日期",
+            value=month_start if quick_month != "自定义" else pd.to_datetime("2026-04-01"),
+        )
     with col2:
-        date_to = st.date_input("结束日期", value=pd.to_datetime("2026-04-30"))
+        date_to = st.date_input(
+            "结束日期",
+            value=month_end if quick_month != "自定义" else pd.to_datetime("2026-04-30"),
+        )
 
     selected_products = st.multiselect(
         "商品名称",
@@ -290,7 +309,14 @@ with col1:
         }
         st_echarts(options=bar_opts, height="400px", key="ranking", theme="streamlit")
 
+    # Preload all 3 trend dimensions
+    trend_daily = compute_daily_trend(data)
+    trend_hourly = compute_hourly_distribution(data)
+    trend_monthly = compute_monthly_trend(data)
+
 with col2:
+    st.subheader(":chart_with_upwards_trend: 销售趋势")
+
     trend_dim = st.selectbox(
         "时间维度",
         ["每日", "分时", "每月"],
@@ -298,11 +324,9 @@ with col2:
         label_visibility="collapsed",
     )
     if trend_dim == "分时":
-        st.subheader(":clock2: 分时销售趋势")
-        hourly = compute_hourly_distribution(data)
-        if not hourly.empty:
-            hours = hourly["hour_of_day"].astype(str).tolist()
-            h_sales = hourly["total_price"].round(0).astype(int).tolist()
+        if not trend_hourly.empty:
+            hours = trend_hourly["hour_of_day"].astype(str).tolist()
+            h_sales = trend_hourly["total_price"].round(0).astype(int).tolist()
             line_opts = {
                 "tooltip": {"trigger": "axis"},
                 "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
@@ -318,11 +342,9 @@ with col2:
         else:
             st.caption("暂无分时数据（需导入含时间的商品明细）")
     elif trend_dim == "每月":
-        st.subheader(":chart_with_upwards_trend: 每月销售趋势")
-        monthly = compute_monthly_trend(data)
-        if not monthly.empty:
-            months = monthly["sale_month"].tolist()
-            m_sales = monthly["total_price"].round(0).astype(int).tolist()
+        if not trend_monthly.empty:
+            months = trend_monthly["sale_month"].tolist()
+            m_sales = trend_monthly["total_price"].round(0).astype(int).tolist()
             line_opts = {
                 "tooltip": {"trigger": "axis"},
                 "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
@@ -345,11 +367,9 @@ with col2:
         else:
             st.caption("暂无月度数据")
     else:
-        st.subheader(":chart_with_upwards_trend: 每日销售趋势")
-        trend = compute_daily_trend(data)
-        if not trend.empty:
-            dates = trend["sale_date"].astype(str).tolist()
-            daily_sales = trend["total_price"].round(0).astype(int).tolist()
+        if not trend_daily.empty:
+            dates = trend_daily["sale_date"].astype(str).tolist()
+            daily_sales = trend_daily["total_price"].round(0).astype(int).tolist()
             line_opts = {
                 "tooltip": {"trigger": "axis"},
                 "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
