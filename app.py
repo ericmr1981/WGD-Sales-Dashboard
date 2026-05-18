@@ -49,15 +49,22 @@ def get_active_channels() -> List[str]:
     ctx.verify_mode = ssl.CERT_NONE
 
     cols = ",".join(CHANNEL_KEYS)
-    url = f"{_url}/rest/v1/order_revenue?select={cols}&limit=5000"
-    req = urllib.request.Request(url)
-    req.add_header("apikey", _key)
-    req.add_header("Authorization", f"Bearer {_key}")
-    req.add_header("Accept", "application/json")
-    resp = urllib.request.urlopen(req, context=ctx)
-    rows = json.loads(resp.read().decode())
+    totals = {c: 0.0 for c in CHANNEL_KEYS}
+    for offset in range(0, 50000, 5000):
+        qs = f"select={cols}&limit=5000&offset={offset}"
+        req = urllib.request.Request(f"{_url}/rest/v1/order_revenue?{qs}")
+        req.add_header("apikey", _key)
+        req.add_header("Authorization", f"Bearer {_key}")
+        req.add_header("Accept", "application/json")
+        resp = urllib.request.urlopen(req, context=ctx)
+        rows = json.loads(resp.read().decode())
+        if not rows:
+            break
+        for c in CHANNEL_KEYS:
+            totals[c] += sum(float(r.get(c, 0) or 0) for r in rows)
+        if len(rows) < 5000:
+            break
 
-    totals = {c: sum(float(r.get(c, 0) or 0) for r in rows) for c in CHANNEL_KEYS}
     return [CHANNEL_META[c] for c, v in sorted(totals.items(), key=lambda x: -x[1]) if v > 0]
 
 
@@ -357,11 +364,12 @@ with col1:
 with col2:
     st.subheader(":chart_with_upwards_trend: 销售趋势")
 
-    trend_dim = st.selectbox(
+    trend_dim = st.radio(
         "时间维度",
         ["每日", "分时", "每月"],
         key="trend_dim",
         label_visibility="collapsed",
+        horizontal=True,
     )
     if trend_dim == "分时":
         if not trend_hourly.empty:
