@@ -3,8 +3,9 @@ import csv
 import json
 import ssl
 import io
+import urllib.parse
 import urllib.request
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import openpyxl
 
@@ -15,7 +16,7 @@ _ctx.check_hostname = False
 _ctx.verify_mode = ssl.CERT_NONE
 
 
-def clean_value(val):
+def clean_value(val: Any) -> Optional[str]:
     if val is None:
         return None
     val = str(val).strip().strip("`").strip("'")
@@ -112,7 +113,8 @@ def check_existing_orders(order_nos: List[str]) -> set:
     """Query Supabase for which order_nos already exist in pos_orders."""
     if not order_nos:
         return set()
-    result = _supabase_request("GET", f"pos_orders?select=order_no&order_no=in.({','.join(order_nos)})")
+    quoted = ",".join(urllib.parse.quote(no, safe="") for no in order_nos)
+    result = _supabase_request("GET", f"pos_orders?select=order_no&order_no=in.({quoted})")
     return {r["order_no"] for r in result if r.get("order_no")}
 
 
@@ -126,9 +128,10 @@ def check_existing_product_sales(keys: List[tuple]) -> set:
     if not keys:
         return set()
     order_nos = list({k[0] for k in keys})
+    quoted = ",".join(urllib.parse.quote(no, safe="") for no in order_nos)
     result = _supabase_request(
         "GET",
-        f"product_sales?select=order_no,product_name&order_no=in.({','.join(order_nos)})"
+        f"product_sales?select=order_no,product_name&order_no=in.({quoted})"
     )
     existing = {(r["order_no"], r["product_name"]) for r in result if r.get("order_no") and r.get("product_name")}
     return existing
