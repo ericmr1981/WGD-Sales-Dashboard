@@ -88,6 +88,7 @@ def query_sales_analysis(
     match_status: Optional[str] = None,
     products: Optional[List[str]] = None,
     payment_channels: Optional[List[str]] = None,
+    stores: Optional[List[str]] = None,
 ) -> List[dict]:
     """Query sales_analysis view with filters via PostgREST."""
     params = {"select": "*"}
@@ -99,6 +100,8 @@ def query_sales_analysis(
         params["match_status"] = f"eq.{match_status}"
     if products:
         params["product_name"] = f"in.({','.join(products)})"
+    if stores:
+        params["store_name"] = f"in.({','.join(stores)})"
     return _supabase_get_all("sales_analysis", params)
 
 
@@ -106,3 +109,9 @@ def get_product_names() -> List[str]:
     """Get deduplicated product names from the view."""
     result = _supabase_get_all("sales_analysis", {"select": "product_name"})
     return sorted({r["product_name"] for r in result if r.get("product_name")})
+
+
+def get_store_names() -> List[str]:
+    """Get deduplicated store names from pos_orders."""
+    result = _supabase_get_all("pos_orders", {"select": "store_name"})
+    return sorted({r["store_name"] for r in result if r.get("store_name")})

@@ -49,48 +49,6 @@ def clean_value(val):
     return val if val else None
 
 
-def import_payments():
-    filepath = os.path.join(BASE_DIR, "支付数据 明细数据.csv")
-    with open(filepath, mode="r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        batch = []
-        seen = set()
-        for row in reader:
-            order_no = clean_value(row.get("订单编号", ""))
-            # Deduplicate order_no for upsert
-            if order_no in seen:
-                continue
-            seen.add(order_no)
-            batch.append({
-                "order_no": order_no,
-                "payment_time": clean_value(row.get("日期", "")),
-                "channel": clean_value(row.get("渠道", "")),
-                "merchant_id": clean_value(row.get("商户号", "")),
-                "store_id": clean_value(row.get("门店id", "")),
-                "store_name": clean_value(row.get("入账门店", "")),
-                "receipt_type": clean_value(row.get("收款类型", "")),
-                "order_type": clean_value(row.get("订单类型", "")),
-                "order_store": clean_value(row.get("下单门店", "")),
-                "payment_serial": clean_value(row.get("支付流水号", "")),
-                "transaction_id": clean_value(row.get("交易号", "")),
-                "business_type": clean_value(row.get("业务类型", "")),
-                "total_amount": float(clean_value(row.get("交易额", "0")) or 0),
-                "income_amount": float(clean_value(row.get("收入金额(元)", "0")) or 0),
-                "merchant_discount": float(clean_value(row.get("商家优惠金额", "0")) or 0),
-                "platform_discount": float(clean_value(row.get("平台优惠金额", "0")) or 0),
-                "refund_amount": float(clean_value(row.get("退款金额", "0")) or 0),
-                "service_fee": float(clean_value(row.get("服务费", "0")) or 0),
-                "coupon_name": clean_value(row.get("优惠名称", "")),
-            })
-
-    print(f"payments: 共 {len(batch)} 条（去重后）")
-    for i in range(0, len(batch), 500):
-        chunk = batch[i:i + 500]
-        supabase_request("POST", "payments", chunk)
-        print(f"  payments: 已导入 {min(i+500, len(batch))}/{len(batch)}")
-    print(f"payments: 完成，共 {len(batch)} 条")
-
-
 def import_product_sales():
     filepath = os.path.join(BASE_DIR, "商品销售明细表 2026年4月 (1).csv")
     with open(filepath, mode="r", encoding="utf-8-sig") as f:
@@ -121,9 +79,6 @@ def import_product_sales():
 
 
 if __name__ == "__main__":
-    print("开始导入 payments...")
-    import_payments()
-    print()
     print("开始导入 product_sales...")
     import_product_sales()
     print()

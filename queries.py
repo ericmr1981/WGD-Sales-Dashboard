@@ -35,6 +35,22 @@ def compute_daily_trend(df: pd.DataFrame) -> pd.DataFrame:
     return trend
 
 
+def compute_monthly_trend(df: pd.DataFrame) -> pd.DataFrame:
+    """每月销售趋势"""
+    df = df.copy()
+    df["sale_month"] = pd.to_datetime(df["sale_date"]).dt.strftime("%Y-%m")
+    trend = (
+        df.groupby("sale_month")
+        .agg(
+            orders=("order_no", "nunique"),
+            total_price=("total_price", "sum"),
+        )
+        .reset_index()
+        .sort_values("sale_month")
+    )
+    return trend
+
+
 def compute_hourly_distribution(df: pd.DataFrame) -> pd.DataFrame:
     """分时销售分布"""
     hourly = df.dropna(subset=["hour_of_day"])

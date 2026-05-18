@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 from typing import List
 from streamlit_echarts import st_echarts
-from db import query_sales_analysis, get_product_names, _get_supabase_config
+from db import query_sales_analysis, get_product_names, get_store_names, _get_supabase_config
 from queries import (
     compute_product_ranking,
     compute_daily_trend,
+    compute_monthly_trend,
     compute_hourly_distribution,
     compute_price_distribution,
     compute_attachment_rate,
@@ -60,6 +61,7 @@ def get_active_channels() -> List[str]:
 
 product_names = get_product_names()
 active_channels = get_active_channels()
+store_names = get_store_names()
 
 with st.sidebar:
     st.title(":material/filter_alt: 筛选器")
@@ -84,6 +86,13 @@ with st.sidebar:
         key="channels",
     )
 
+    selected_stores = st.multiselect(
+        "门店",
+        options=store_names,
+        default=[],
+        key="stores",
+    )
+
     # ========== 数据导入 ==========
     st.divider()
     with st.expander(":material/upload: 数据导入", expanded=False):
@@ -93,10 +102,11 @@ with st.sidebar:
             key="import_type",
             label_visibility="collapsed",
         )
+        import_counter = st.session_state.get("import_counter", 0)
         uploaded_file = st.file_uploader(
             "选择文件",
             type=["xlsx"] if import_type == "收银明细表" else ["csv"],
-            key="import_file",
+            key=f"import_file_{import_counter}",
         )
 
         if uploaded_file and st.session_state.get("import_state") != "parsed":
@@ -168,18 +178,20 @@ with st.sidebar:
                         uploaded_count, total_count = upload_batch(st.session_state.import_table, new_rows)
                         st.success(f"成功导入 {uploaded_count}/{total_count} 条记录")
                         for key in ["import_new_rows", "import_total", "import_dup", "import_table",
-                                    "import_state", "import_type_parsed", "import_file"]:
+                                    "import_state", "import_type_parsed"]:
                             if key in st.session_state:
                                 del st.session_state[key]
+                        st.session_state.import_counter = import_counter + 1
                         st.rerun()
                     except Exception as e:
                         st.error(f"导入失败: {e}")
 
             if st.button("取消"):
                 for key in ["import_new_rows", "import_total", "import_dup", "import_table",
-                            "import_state", "import_type_parsed", "import_file"]:
+                            "import_state", "import_type_parsed"]:
                     if key in st.session_state:
                         del st.session_state[key]
+                st.session_state.import_counter = import_counter + 1
                 st.rerun()
 
 df_str = date_from.strftime("%Y-%m-%d")
@@ -194,6 +206,7 @@ raw_data = query_sales_analysis(
     match_status="已匹配",
     products=selected_products if selected_products else None,
     payment_channels=channel_keys if channel_keys else None,
+    stores=selected_stores if selected_stores else None,
 )
 
 if not raw_data:
@@ -226,7 +239,7 @@ attachment_rate = items_per_order.mean()
 digital = order_level["wechat_pay"].sum() + order_level["alipay"].sum() + order_level["yunshanfu"].sum()
 digital_pct = digital / total_revenue * 100 if total_revenue else 0
 
-kpi1, kpi2, kpi3, kpi4, kpi5, kpi6, kpi7 = st.columns(7)
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 with kpi1:
     st.metric("营业额", f"¥{total_revenue:,.0f}")
 with kpi2:
@@ -235,6 +248,8 @@ with kpi3:
     st.metric("总订单数", f"{total_orders:,}")
 with kpi4:
     st.metric("平均客单价", f"¥{avg_order:.1f}")
+
+kpi5, kpi6, kpi7, _ = st.columns(4)
 with kpi5:
     st.metric("连带率", f"{attachment_rate:.2f}")
 with kpi6:
@@ -276,30 +291,84 @@ with col1:
         st_echarts(options=bar_opts, height="400px", key="ranking", theme="streamlit")
 
 with col2:
-    st.subheader(":chart_with_upwards_trend: 每日销售趋势")
-    trend = compute_daily_trend(data)
-    if not trend.empty:
-        dates = trend["sale_date"].astype(str).tolist()
-        daily_sales = trend["total_price"].round(0).astype(int).tolist()
-        line_opts = {
-            "tooltip": {"trigger": "axis"},
-            "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
-            "xAxis": {"type": "category", "data": dates, "axisLabel": {"rotate": 45, "fontSize": 11}},
-            "yAxis": {"type": "value", "axisLabel": {"formatter": "¥{value}"}},
-            "series": [{
-                "type": "line",
-                "data": daily_sales,
-                "smooth": True,
-                "lineStyle": {"width": 3, "color": "#5470c6"},
-                "areaStyle": {"color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
-                                         "colorStops": [
-                                             {"offset": 0, "color": "rgba(84,112,198,0.3)"},
-                                             {"offset": 1, "color": "rgba(84,112,198,0.01)"},
-                                         ]}},
-                "itemStyle": {"color": "#5470c6"},
-            }],
-        }
-        st_echarts(options=line_opts, height="400px", key="trend", theme="streamlit")
+    trend_dim = st.selectbox(
+        "时间维度",
+        ["每日", "分时", "每月"],
+        key="trend_dim",
+        label_visibility="collapsed",
+    )
+    if trend_dim == "分时":
+        st.subheader(":clock2: 分时销售趋势")
+        hourly = compute_hourly_distribution(data)
+        if not hourly.empty:
+            hours = hourly["hour_of_day"].astype(str).tolist()
+            h_sales = hourly["total_price"].round(0).astype(int).tolist()
+            line_opts = {
+                "tooltip": {"trigger": "axis"},
+                "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
+                "xAxis": {"type": "category", "data": hours, "name": "小时", "axisLabel": {"fontSize": 11}},
+                "yAxis": {"type": "value", "axisLabel": {"formatter": "¥{value}"}},
+                "series": [{
+                    "type": "bar",
+                    "data": h_sales,
+                    "itemStyle": {"color": "#5470c6"},
+                }],
+            }
+            st_echarts(options=line_opts, height="400px", key="trend_hourly", theme="streamlit")
+        else:
+            st.caption("暂无分时数据（需导入含时间的商品明细）")
+    elif trend_dim == "每月":
+        st.subheader(":chart_with_upwards_trend: 每月销售趋势")
+        monthly = compute_monthly_trend(data)
+        if not monthly.empty:
+            months = monthly["sale_month"].tolist()
+            m_sales = monthly["total_price"].round(0).astype(int).tolist()
+            line_opts = {
+                "tooltip": {"trigger": "axis"},
+                "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
+                "xAxis": {"type": "category", "data": months, "axisLabel": {"rotate": 0, "fontSize": 11}},
+                "yAxis": {"type": "value", "axisLabel": {"formatter": "¥{value}"}},
+                "series": [{
+                    "type": "line",
+                    "data": m_sales,
+                    "smooth": True,
+                    "lineStyle": {"width": 3, "color": "#ee6666"},
+                    "areaStyle": {"color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                                             "colorStops": [
+                                                 {"offset": 0, "color": "rgba(238,102,102,0.3)"},
+                                                 {"offset": 1, "color": "rgba(238,102,102,0.01)"},
+                                             ]}},
+                    "itemStyle": {"color": "#ee6666"},
+                }],
+            }
+            st_echarts(options=line_opts, height="400px", key="trend_monthly", theme="streamlit")
+        else:
+            st.caption("暂无月度数据")
+    else:
+        st.subheader(":chart_with_upwards_trend: 每日销售趋势")
+        trend = compute_daily_trend(data)
+        if not trend.empty:
+            dates = trend["sale_date"].astype(str).tolist()
+            daily_sales = trend["total_price"].round(0).astype(int).tolist()
+            line_opts = {
+                "tooltip": {"trigger": "axis"},
+                "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
+                "xAxis": {"type": "category", "data": dates, "axisLabel": {"rotate": 45, "fontSize": 11}},
+                "yAxis": {"type": "value", "axisLabel": {"formatter": "¥{value}"}},
+                "series": [{
+                    "type": "line",
+                    "data": daily_sales,
+                    "smooth": True,
+                    "lineStyle": {"width": 3, "color": "#5470c6"},
+                    "areaStyle": {"color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                                             "colorStops": [
+                                                 {"offset": 0, "color": "rgba(84,112,198,0.3)"},
+                                                 {"offset": 1, "color": "rgba(84,112,198,0.01)"},
+                                             ]}},
+                    "itemStyle": {"color": "#5470c6"},
+                }],
+            }
+            st_echarts(options=line_opts, height="400px", key="trend_daily", theme="streamlit")
 
 # ========== 支付方式分布 + 时段分布 ==========
 col1, col2 = st.columns(2)
