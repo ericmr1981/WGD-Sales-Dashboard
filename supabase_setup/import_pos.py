@@ -50,7 +50,7 @@ def clean_value(val):
 
 
 def import_pos_orders():
-    """Import 收银明细表 xlsx — columns I-P are payment channels."""
+    """Import 收银明细表 xlsx — columns I-O are payment channels (免支付/微信/抖音/支付宝/现金/美团/自定义)."""
     import openpyxl
 
     filepath = os.path.join(BASE_DIR, "收银明细表-2026-04-012026-04-30-9d15c166a917437b9cbb8f575ba0ce2c.xlsx")
@@ -80,14 +80,13 @@ def import_pos_orders():
             "discount_total": col(6),
             "net_revenue": col(7),
             "quantity": int(col(8)),
-            "yunshanfu": col(9),
-            "wechat_pay": col(11),
-            "alipay": col(13),
-            "cash": col(14),
-            "douyin_coupon": col(12),
-            "meituan_coupon": col(15),
-            "free_payment": col(10),
-            "custom_payment": col(16),
+            "free_payment": col(9),
+            "wechat_pay": col(10),
+            "douyin_coupon": col(11),
+            "alipay": col(12),
+            "cash": col(13),
+            "meituan_coupon": col(14),
+            "custom_payment": col(15),
         })
 
     print(f"pos_orders: 共 {len(batch)} 条（去重后）")

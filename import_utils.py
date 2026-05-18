@@ -74,14 +74,13 @@ def parse_pos_orders(file_bytes: bytes) -> List[dict]:
             "discount_total": _col(6),
             "net_revenue": _col(7),
             "quantity": int(_col(8)),
-            "yunshanfu": _col(9),
-            "free_payment": _col(10),
-            "wechat_pay": _col(11),
-            "douyin_coupon": _col(12),
-            "alipay": _col(13),
-            "cash": _col(14),
-            "meituan_coupon": _col(15),
-            "custom_payment": _col(16),
+            "free_payment": _col(9),
+            "wechat_pay": _col(10),
+            "douyin_coupon": _col(11),
+            "alipay": _col(12),
+            "cash": _col(13),
+            "meituan_coupon": _col(14),
+            "custom_payment": _col(15),
         })
     return rows
 
