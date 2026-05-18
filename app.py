@@ -85,8 +85,8 @@ with st.sidebar:
     )
 
     # ========== 数据导入 ==========
-    st.sidebar.divider()
-    with st.sidebar.expander(":material/upload: 数据导入", expanded=False):
+    st.divider()
+    with st.expander(":material/upload: 数据导入", expanded=False):
         import_type = st.radio(
             "文件类型",
             ["收银明细表", "商品明细表"],
@@ -99,7 +99,7 @@ with st.sidebar:
             key="import_file",
         )
 
-        if uploaded_file and "import_state" not in st.session_state:
+        if uploaded_file and st.session_state.get("import_state") != "parsed":
             if st.button("解析文件"):
                 with st.spinner("正在解析..."):
                     try:
@@ -140,6 +140,7 @@ with st.sidebar:
                     st.session_state.import_total = len(rows)
                     st.session_state.import_dup = dup_count
                     st.session_state.import_table = "pos_orders" if import_type == "收银明细表" else "product_sales"
+                    st.session_state.import_state = "parsed"
                     st.rerun()
 
         # Show preview and confirm after parsing
@@ -163,14 +164,14 @@ with st.sidebar:
                         count = upload_batch(st.session_state.import_table, new_rows)
                         st.success(f"成功导入 {count} 条记录")
                         # Clear state and refresh
-                        for key in ["import_new_rows", "import_total", "import_dup", "import_table"]:
+                        for key in ["import_new_rows", "import_total", "import_dup", "import_table", "import_state"]:
                             del st.session_state[key]
                         st.rerun()
                     except Exception as e:
                         st.error(f"导入失败: {e}")
 
             if st.button("取消"):
-                for key in ["import_new_rows", "import_total", "import_dup", "import_table"]:
+                for key in ["import_new_rows", "import_total", "import_dup", "import_table", "import_state"]:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
