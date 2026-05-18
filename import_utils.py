@@ -137,11 +137,11 @@ def check_existing_product_sales(keys: List[tuple]) -> set:
     return existing
 
 
-def upload_batch(table: str, rows: List[dict]) -> int:
-    """Upload rows to Supabase table in batches of 500. Returns count of uploaded rows."""
+def upload_batch(table: str, rows: List[dict]) -> tuple:
+    """Upload rows to Supabase table in batches of 500. Returns (uploaded, total)."""
     total = 0
     for i in range(0, len(rows), 500):
         chunk = rows[i:i + 500]
         _supabase_request("POST", table, chunk)
         total += len(chunk)
-    return total
+    return total, len(rows)
