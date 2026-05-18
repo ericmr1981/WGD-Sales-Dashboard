@@ -11,6 +11,7 @@ from queries import (
     compute_attachment_rate,
     compute_top_combos,
 )
+from import_utils import parse_pos_orders, parse_product_sales, check_existing_orders, check_existing_product_sales, upload_batch
 
 st.set_page_config(
     page_title="商品销售分析报表",
@@ -82,6 +83,97 @@ with st.sidebar:
         default=[],
         key="channels",
     )
+
+    # ========== 数据导入 ==========
+    st.sidebar.divider()
+    with st.sidebar.expander(":material/upload: 数据导入", expanded=False):
+        import_type = st.radio(
+            "文件类型",
+            ["收银明细表", "商品明细表"],
+            key="import_type",
+            label_visibility="collapsed",
+        )
+        uploaded_file = st.file_uploader(
+            "选择文件",
+            type=["xlsx"] if import_type == "收银明细表" else ["csv"],
+            key="import_file",
+        )
+
+        if uploaded_file and "import_state" not in st.session_state:
+            if st.button("解析文件"):
+                with st.spinner("正在解析..."):
+                    try:
+                        file_bytes = uploaded_file.getvalue()
+                        if import_type == "收银明细表":
+                            rows = parse_pos_orders(file_bytes)
+                        else:
+                            rows = parse_product_sales(file_bytes)
+                    except Exception as e:
+                        st.error(f"解析失败: {e}")
+                        st.stop()
+
+                    if not rows:
+                        st.warning("文件中没有有效数据")
+                        st.stop()
+
+                    # Check duplicates
+                    with st.spinner("正在检查重复..."):
+                        try:
+                            if import_type == "收银明细表":
+                                existing = check_existing_orders([r["order_no"] for r in rows])
+                                new_rows = [r for r in rows if r["order_no"] not in existing]
+                                dup_count = len(rows) - len(new_rows)
+                            else:
+                                keys = [(r["order_no"], r["product_name"]) for r in rows]
+                                existing = check_existing_product_sales(keys)
+                                new_rows = [r for r in rows if (r["order_no"], r["product_name"]) not in existing]
+                                dup_count = len(rows) - len(new_rows)
+                        except Exception as e:
+                            st.error(f"检查重复失败: {e}")
+                            st.stop()
+
+                    if not new_rows:
+                        st.info("所有记录均已存在，无需导入")
+                        st.stop()
+
+                    st.session_state.import_new_rows = new_rows
+                    st.session_state.import_total = len(rows)
+                    st.session_state.import_dup = dup_count
+                    st.session_state.import_table = "pos_orders" if import_type == "收银明细表" else "product_sales"
+                    st.rerun()
+
+        # Show preview and confirm after parsing
+        if "import_new_rows" in st.session_state:
+            new_rows = st.session_state.import_new_rows
+            st.caption(f"待导入: {len(new_rows)} 条 | 跳过重复: {st.session_state.import_dup} 条")
+            if import_type == "收银明细表":
+                st.dataframe(
+                    [{k: r[k] for k in ["order_no", "sale_date", "total_revenue", "net_revenue"]} for r in new_rows[:5]],
+                    height=150,
+                )
+            else:
+                st.dataframe(
+                    [{k: r[k] for k in ["order_no", "product_name", "quantity", "total_price"]} for r in new_rows[:5]],
+                    height=150,
+                )
+
+            if st.button("确认导入"):
+                with st.spinner(f"正在导入 {len(new_rows)} 条记录..."):
+                    try:
+                        count = upload_batch(st.session_state.import_table, new_rows)
+                        st.success(f"成功导入 {count} 条记录")
+                        # Clear state and refresh
+                        for key in ["import_new_rows", "import_total", "import_dup", "import_table"]:
+                            del st.session_state[key]
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"导入失败: {e}")
+
+            if st.button("取消"):
+                for key in ["import_new_rows", "import_total", "import_dup", "import_table"]:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
 
 df_str = date_from.strftime("%Y-%m-%d")
 dt_str = date_to.strftime("%Y-%m-%d")
