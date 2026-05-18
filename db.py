@@ -112,8 +112,8 @@ def get_product_names() -> List[str]:
 
 
 def get_store_names() -> List[str]:
-    """Get deduplicated store names from pos_orders."""
-    result = _supabase_get_all("pos_orders", {"select": "store_name"})
+    """Get deduplicated store names from revenue_detail."""
+    result = _supabase_get_all("revenue_detail", {"select": "store_name"})
     return sorted({r["store_name"] for r in result if r.get("store_name")})
 
 
