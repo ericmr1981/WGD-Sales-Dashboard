@@ -49,13 +49,39 @@ def clean_value(val):
     return val if val else None
 
 
+CHANNEL_HEADER_MAP = {
+    "免支付": "free_payment",
+    "微信支付": "wechat_pay",
+    "支付宝支付": "alipay",
+    "现金支付": "cash",
+    "美团团购券": "meituan_coupon",
+    "抖音团购券": "douyin_coupon",
+    "云闪付": "yunshanfu",
+    "自定义结账方式": "custom_payment",
+}
+
+
 def import_pos_orders():
-    """Import 收银明细表 xlsx — columns I-O are payment channels (免支付/微信/抖音/支付宝/现金/美团/自定义)."""
+    """Import 收银明细表 xlsx — reads row 2 headers to map payment channels by name."""
     import openpyxl
 
     filepath = os.path.join(BASE_DIR, "收银明细表-2026-04-012026-04-30-9d15c166a917437b9cbb8f575ba0ce2c.xlsx")
     wb = openpyxl.load_workbook(filepath, data_only=True)
     ws = wb.active
+
+    # Map channel header name → column index from row 2
+    chan_cols = {}
+    for c in range(1, ws.max_column + 1):
+        h = clean_value(ws.cell(2, c).value)
+        if h and h in CHANNEL_HEADER_MAP:
+            chan_cols[CHANNEL_HEADER_MAP[h]] = c
+
+    def chan_val(db_col, row_idx):
+        c = chan_cols.get(db_col)
+        if c is None:
+            return 0.0
+        v = ws.cell(row_idx, c).value
+        return float(v) if v is not None else 0.0
 
     batch = []
     seen = set()
@@ -67,26 +93,23 @@ def import_pos_orders():
             continue
         seen.add(order_no)
 
-        def col(n):
-            v = ws.cell(row_idx, n).value
-            return float(v) if v is not None else 0.0
-
         batch.append({
             "order_no": order_no,
             "store_name": clean_value(ws.cell(row_idx, 1).value),
             "sale_date": clean_value(ws.cell(row_idx, 2).value),
-            "total_revenue": col(4),
-            "gross_income": col(5),
-            "discount_total": col(6),
-            "net_revenue": col(7),
-            "quantity": int(col(8)),
-            "free_payment": col(9),
-            "wechat_pay": col(10),
-            "douyin_coupon": col(11),
-            "alipay": col(12),
-            "cash": col(13),
-            "meituan_coupon": col(14),
-            "custom_payment": col(15),
+            "total_revenue": float(ws.cell(row_idx, 4).value or 0),
+            "gross_income": float(ws.cell(row_idx, 5).value or 0),
+            "discount_total": float(ws.cell(row_idx, 6).value or 0),
+            "net_revenue": float(ws.cell(row_idx, 7).value or 0),
+            "quantity": int(float(ws.cell(row_idx, 8).value or 0)),
+            "free_payment": chan_val("free_payment", row_idx),
+            "wechat_pay": chan_val("wechat_pay", row_idx),
+            "douyin_coupon": chan_val("douyin_coupon", row_idx),
+            "alipay": chan_val("alipay", row_idx),
+            "cash": chan_val("cash", row_idx),
+            "meituan_coupon": chan_val("meituan_coupon", row_idx),
+            "custom_payment": chan_val("custom_payment", row_idx),
+            "yunshanfu": chan_val("yunshanfu", row_idx),
         })
 
     print(f"pos_orders: 共 {len(batch)} 条（去重后）")

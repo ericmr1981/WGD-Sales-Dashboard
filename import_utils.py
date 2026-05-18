@@ -49,13 +49,39 @@ def _supabase_request(method: str, path: str, data: Optional[list] = None):
         raise RuntimeError(f"Supabase request failed: {e}")
 
 
+CHANNEL_HEADER_MAP = {
+    "免支付": "free_payment",
+    "微信支付": "wechat_pay",
+    "支付宝支付": "alipay",
+    "现金支付": "cash",
+    "美团团购券": "meituan_coupon",
+    "抖音团购券": "douyin_coupon",
+    "云闪付": "yunshanfu",
+    "自定义结账方式": "custom_payment",
+}
+
+
 def parse_pos_orders(file_bytes: bytes) -> List[dict]:
-    """Parse 收银明细表 XLSX into list of row dicts for pos_orders table."""
+    """Parse 收银明细表 XLSX into list of row dicts for pos_orders table.
+
+    Reads row 2 sub-headers to determine which payment channel is in which column,
+    since column positions vary across different XLSX files.
+    """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
     ws = wb.active
 
-    def _col(n):
-        v = ws.cell(row_idx, n).value
+    # Build channel column map from row 2 sub-headers
+    channel_cols = {}
+    for col_idx in range(1, ws.max_column + 1):
+        header = clean_value(ws.cell(2, col_idx).value)
+        if header and header in CHANNEL_HEADER_MAP:
+            channel_cols[CHANNEL_HEADER_MAP[header]] = col_idx
+
+    def _chan(db_col: str, row_idx: int) -> float:
+        c = channel_cols.get(db_col)
+        if c is None:
+            return 0.0
+        v = ws.cell(row_idx, c).value
         return float(v) if v is not None else 0.0
 
     rows = []
@@ -69,18 +95,20 @@ def parse_pos_orders(file_bytes: bytes) -> List[dict]:
             "order_no": order_no,
             "store_name": clean_value(ws.cell(row_idx, 1).value),
             "sale_date": clean_value(ws.cell(row_idx, 2).value),
-            "total_revenue": _col(4),
-            "gross_income": _col(5),
-            "discount_total": _col(6),
-            "net_revenue": _col(7),
-            "quantity": int(_col(8)),
-            "free_payment": _col(9),
-            "wechat_pay": _col(10),
-            "douyin_coupon": _col(11),
-            "alipay": _col(12),
-            "cash": _col(13),
-            "meituan_coupon": _col(14),
-            "custom_payment": _col(15),
+            "total_revenue": _chan("_total", row_idx) if "_total" in channel_cols
+                else float(ws.cell(row_idx, 4).value or 0),
+            "gross_income": float(ws.cell(row_idx, 5).value or 0),
+            "discount_total": float(ws.cell(row_idx, 6).value or 0),
+            "net_revenue": float(ws.cell(row_idx, 7).value or 0),
+            "quantity": int(float(ws.cell(row_idx, 8).value or 0)),
+            "free_payment": _chan("free_payment", row_idx),
+            "wechat_pay": _chan("wechat_pay", row_idx),
+            "douyin_coupon": _chan("douyin_coupon", row_idx),
+            "alipay": _chan("alipay", row_idx),
+            "cash": _chan("cash", row_idx),
+            "meituan_coupon": _chan("meituan_coupon", row_idx),
+            "custom_payment": _chan("custom_payment", row_idx),
+            "yunshanfu": _chan("yunshanfu", row_idx),
         })
     return rows
 

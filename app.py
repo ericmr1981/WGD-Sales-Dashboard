@@ -25,6 +25,7 @@ st.set_page_config(
 CHANNEL_META = {
     "wechat_pay": "微信支付",
     "alipay": "支付宝",
+    "yunshanfu": "云闪付",
     "cash": "现金",
     "douyin_coupon": "抖音团购券",
     "meituan_coupon": "美团团购券",
