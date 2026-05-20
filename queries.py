@@ -21,56 +21,44 @@ def compute_product_ranking(df: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
     return ranking
 
 
-def compute_daily_trend(df: pd.DataFrame) -> pd.DataFrame:
-    """每日销售趋势"""
-    trend = (
-        df.groupby("sale_date")
+def _order_revenue_by(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
+    """Group df by date/month/hour and sum order-level total_revenue (deduped per order)."""
+    unique = df[[group_col, "order_no", "total_revenue"]].drop_duplicates(subset=["order_no", group_col])
+    result = (
+        unique.groupby(group_col)
         .agg(
             orders=("order_no", "nunique"),
-            total_price=("total_price", "sum"),
+            total_revenue=("total_revenue", "sum"),
         )
         .reset_index()
-        .sort_values("sale_date")
+        .sort_values(group_col)
     )
-    return trend
+    return result
+
+
+def compute_daily_trend(df: pd.DataFrame) -> pd.DataFrame:
+    """每日销售趋势"""
+    return _order_revenue_by(df, "sale_date")
 
 
 def compute_monthly_trend(df: pd.DataFrame) -> pd.DataFrame:
     """每月销售趋势"""
     df = df.copy()
     df["sale_month"] = pd.to_datetime(df["sale_date"]).dt.strftime("%Y-%m")
-    trend = (
-        df.groupby("sale_month")
-        .agg(
-            orders=("order_no", "nunique"),
-            total_price=("total_price", "sum"),
-        )
-        .reset_index()
-        .sort_values("sale_month")
-    )
-    return trend
+    return _order_revenue_by(df, "sale_month")
 
 
 def compute_hourly_distribution(df: pd.DataFrame) -> pd.DataFrame:
     """分时销售分布"""
-    hourly = df.dropna(subset=["hour_of_day"])
-    if hourly.empty:
+    df = df.dropna(subset=["hour_of_day"])
+    if df.empty:
         return pd.DataFrame()
-    dist = (
-        hourly.groupby("hour_of_day")
-        .agg(
-            orders=("order_no", "nunique"),
-            total_price=("total_price", "sum"),
-        )
-        .reset_index()
-        .sort_values("hour_of_day")
-    )
-    return dist
+    return _order_revenue_by(df, "hour_of_day")
 
 
 def compute_price_distribution(df: pd.DataFrame) -> dict:
     """客单价分布（按订单）"""
-    order_totals = df.groupby("order_no")["total_price"].sum()
+    order_totals = df.groupby("order_no")["total_revenue"].first()
     bins = [0, 20, 30, 40, 50, 80, 100, float("inf")]
     labels = ["0-20", "20-30", "30-40", "40-50", "50-80", "80-100", "100+"]
     binned = pd.cut(order_totals, bins=bins, labels=labels, right=True)

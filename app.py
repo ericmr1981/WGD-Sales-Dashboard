@@ -424,7 +424,7 @@ with col2:
     if trend_dim == "分时":
         if not trend_hourly.empty:
             hours = trend_hourly["hour_of_day"].astype(str).tolist()
-            h_sales = trend_hourly["total_price"].round(0).astype(int).tolist()
+            h_sales = trend_hourly["total_revenue"].round(0).astype(int).tolist()
             line_opts = {
                 "tooltip": {"trigger": "axis"},
                 "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
@@ -442,7 +442,7 @@ with col2:
     elif trend_dim == "每月":
         if not trend_monthly.empty:
             months = trend_monthly["sale_month"].tolist()
-            m_sales = trend_monthly["total_price"].round(0).astype(int).tolist()
+            m_sales = trend_monthly["total_revenue"].round(0).astype(int).tolist()
             line_opts = {
                 "tooltip": {"trigger": "axis"},
                 "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
@@ -467,7 +467,7 @@ with col2:
     else:
         if not trend_daily.empty:
             dates = trend_daily["sale_date"].astype(str).tolist()
-            daily_sales = trend_daily["total_price"].round(0).astype(int).tolist()
+            daily_sales = trend_daily["total_revenue"].round(0).astype(int).tolist()
             line_opts = {
                 "tooltip": {"trigger": "axis"},
                 "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
