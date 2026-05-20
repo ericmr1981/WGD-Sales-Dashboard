@@ -125,12 +125,22 @@ def get_available_months() -> List[str]:
 
 
 def get_latest_sale_date() -> Optional[str]:
-    """Get the latest sale_date from revenue_detail."""
-    months = get_available_months()
-    if not months:
+    """Get the latest sale_date from revenue_detail directly via REST."""
+    supabase_url, supabase_key = _get_supabase_config()
+    if not supabase_url or not supabase_key:
         return None
-    # Fetch the latest month's first batch to find the max date
-    latest_month = months[-1]
-    result = _supabase_get_all("revenue_detail", {"select": "sale_date", "sale_date": f"like.{latest_month}%"})
-    dates = sorted({r["sale_date"] for r in result if r.get("sale_date")}, reverse=True)
-    return dates[0] if dates else None
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    import urllib.request, json
+    url = f"{supabase_url}/rest/v1/revenue_detail?select=sale_date&order=sale_date.desc.nullslast&limit=1"
+    req = urllib.request.Request(url)
+    req.add_header("apikey", supabase_key)
+    req.add_header("Authorization", f"Bearer {supabase_key}")
+    req.add_header("Accept", "application/json")
+    try:
+        resp = urllib.request.urlopen(req, context=ctx)
+        result = json.loads(resp.read().decode())
+        return result[0]["sale_date"] if result else None
+    except Exception:
+        return None
