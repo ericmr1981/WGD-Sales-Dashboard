@@ -80,7 +80,7 @@ CHANNEL_META = {
     "douyin_coupon": "抖音团购券",
     "meituan_coupon": "美团团购券",
     "free_payment": "免支付",
-    "custom_payment": "自定义",
+    "custom_payment": "会员快速支付",
 }
 
 CHANNEL_KEYS = list(CHANNEL_META.keys())
@@ -323,7 +323,12 @@ if channel_keys:
         st.info("该筛选条件下没有数据")
         st.stop()
 
-st.title(":material/bar_chart: 商品销售分析报表")
+title_col, date_col = st.columns([1, 0.3])
+with title_col:
+    st.title(":material/bar_chart: 商品销售分析报表")
+with date_col:
+    latest_date = data["sale_date"].max()
+    st.caption(f"数据截止: {latest_date}")
 
 # KPI 计算（按订单去重）
 order_level = data.groupby("order_no").first().reset_index()
