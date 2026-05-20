@@ -22,6 +22,56 @@ st.set_page_config(
     layout="wide",
 )
 
+# ========== SSO 认证 ==========
+import json, ssl, urllib.request
+
+SUPABASE_URL, SUPABASE_ANON_KEY = None, None
+
+_sso_ctx = ssl.create_default_context()
+_sso_ctx.check_hostname = False
+_sso_ctx.verify_mode = ssl.CERT_NONE
+
+try:
+    secrets = st.secrets
+    SUPABASE_URL = secrets.get("supabase", {}).get("url") or secrets.get("SUPABASE_URL")
+    SUPABASE_ANON_KEY = secrets.get("supabase", {}).get("anon_key") or secrets.get("SUPABASE_ANON_KEY")
+except Exception:
+    pass
+
+if "sso_user" not in st.session_state:
+    params = st.query_params
+    token = params.get("sso_token")
+    if isinstance(token, list):
+        token = token[0] if token else None
+    token = str(token) if token else None
+
+    if token and SUPABASE_URL and SUPABASE_ANON_KEY:
+        body = json.dumps({"p_token": token}).encode()
+        req = urllib.request.Request(
+            f"{SUPABASE_URL}/rest/v1/rpc/verify_sso_token",
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "apikey": SUPABASE_ANON_KEY,
+                "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+            },
+        )
+        try:
+            resp = urllib.request.urlopen(req, context=_sso_ctx)
+            result = json.loads(resp.read().decode())
+            if result.get("valid"):
+                st.session_state.sso_user = result
+                st.rerun()
+        except Exception:
+            pass
+
+    if "sso_user" not in st.session_state or not st.session_state.sso_user:
+        st.error("# 未授权访问\n\n请通过公司 Portal 登录后访问。")
+        st.stop()
+
+SUPABASE_URL, SUPABASE_ANON_KEY = None, None  # 清除避免被后续代码误用
+# ========== SSO 认证结束 ==========
+
 CHANNEL_META = {
     "wechat_pay": "微信支付",
     "alipay": "支付宝",
