@@ -100,8 +100,8 @@ def get_active_channels() -> List[str]:
 
     cols = ",".join(CHANNEL_KEYS)
     totals = {c: 0.0 for c in CHANNEL_KEYS}
-    for offset in range(0, 50000, 5000):
-        qs = f"select={cols}&limit=5000&offset={offset}"
+    for offset in range(0, 50000, 1000):
+        qs = f"select={cols}&limit=1000&offset={offset}"
         req = urllib.request.Request(f"{_url}/rest/v1/order_revenue?{qs}")
         req.add_header("apikey", _key)
         req.add_header("Authorization", f"Bearer {_key}")
