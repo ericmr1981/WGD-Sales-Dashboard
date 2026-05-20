@@ -122,3 +122,15 @@ def get_available_months() -> List[str]:
     result = _supabase_get_all("revenue_detail", {"select": "sale_date"})
     months = sorted({r["sale_date"][:7] for r in result if r.get("sale_date")})
     return months
+
+
+def get_latest_sale_date() -> Optional[str]:
+    """Get the latest sale_date from revenue_detail."""
+    months = get_available_months()
+    if not months:
+        return None
+    # Fetch the latest month's first batch to find the max date
+    latest_month = months[-1]
+    result = _supabase_get_all("revenue_detail", {"select": "sale_date", "sale_date": f"like.{latest_month}%"})
+    dates = sorted({r["sale_date"] for r in result if r.get("sale_date")}, reverse=True)
+    return dates[0] if dates else None

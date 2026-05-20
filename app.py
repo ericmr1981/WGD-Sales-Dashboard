@@ -4,7 +4,7 @@ from typing import List
 from streamlit_echarts import st_echarts
 import datetime
 import calendar
-from db import query_sales_analysis, get_product_names, get_store_names, get_available_months, _get_supabase_config
+from db import query_sales_analysis, get_product_names, get_store_names, get_available_months, get_latest_sale_date, _get_supabase_config
 from queries import (
     compute_product_ranking,
     compute_daily_trend,
@@ -122,6 +122,7 @@ product_names = get_product_names()
 active_channels = get_active_channels()
 store_names = get_store_names()
 available_months = get_available_months()
+global_latest_date = get_latest_sale_date()
 
 with st.sidebar:
     st.title(":material/filter_alt: 筛选器")
@@ -327,8 +328,7 @@ title_col, date_col = st.columns([1, 0.3])
 with title_col:
     st.title(":material/bar_chart: 商品销售分析报表")
 with date_col:
-    latest_date = data["sale_date"].max()
-    st.caption(f"数据截止: {latest_date}")
+    st.caption(f"数据截止: {global_latest_date or '未知'}")
 
 # KPI 计算（按订单去重）
 order_level = data.groupby("order_no").first().reset_index()
